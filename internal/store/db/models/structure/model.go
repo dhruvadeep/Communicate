@@ -7,3 +7,10 @@ type Migration struct {
 	DeleteTableCommand string
 	DeleteRowsCommand  string
 }
+
+// Index groups CREATE INDEX and DROP INDEX commands for a single table.
+type Index struct {
+	TableName string
+	CreateSQL []string
+	DropSQL   []string
+}

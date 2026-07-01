@@ -5,7 +5,8 @@ import (
 	"log"
 
 	"Communicate/internal/store/db"
-	"Communicate/internal/store/db/models"
+	"Communicate/internal/store/db/migrate"
+	"Communicate/internal/store/db/models/indexes"
 	"Communicate/internal/store/db/models/tables"
 )
 
@@ -18,14 +19,24 @@ func main() {
 	}
 	defer database.Close()
 
-	// if err := models.RunMigrations(ctx, database.Pool(), tables.All...); err != nil {
-	// 	log.Fatalf("failed to run migrations: %v", err)
+	if err := migrate.RunMigrations(ctx, database.Pool(), tables.All...); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// After tables are created, run indexes:
+	if err := migrate.RunIndexes(ctx, database.Pool(), indexes.All...); err != nil {
+		log.Fatalf("failed to run indexes: %v", err)
+	}
+	//
+	// To drop all indexes:
+	// if err := migrate.DropIndexes(ctx, database.Pool(), indexes.All...); err != nil {
+	// 	log.Fatalf("failed to drop indexes: %v", err)
 	// }
 
 	// To drop all tables:
-	if err := models.DropTables(ctx, database.Pool(), tables.All...); err != nil {
-		log.Fatalf("failed to drop all tables: %v", err)
-	}
+	// if err := migrate.DropTables(ctx, database.Pool(), tables.All...); err != nil {
+	// 	log.Fatalf("failed to drop all tables: %v", err)
+	// }
 
 	log.Println("database connected and migrations applied")
 
@@ -35,7 +46,7 @@ func main() {
 	// 3. add it to tables.All
 
 	// To clear rows without dropping the table:
-	// if err := models.ClearTables(ctx, database.Pool(), tables.Users); err != nil {
+	// if err := migrate.ClearTables(ctx, database.Pool(), tables.Users); err != nil {
 	// 	log.Fatalf("failed to clear users table: %v", err)
 	// }
 }
