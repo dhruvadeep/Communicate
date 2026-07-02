@@ -27,6 +27,12 @@ go.work.sum
 # env file
 .env
 
+# Frontend (testing only, not part of the Go project)
+frontend/
+
+# SQLite / local databases
+*.db
+
 # Editor/IDE
 # .idea/
 # .vscode/
