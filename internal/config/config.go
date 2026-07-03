@@ -30,6 +30,7 @@ type Config struct {
 
 	// Server
 	ServerPort string
+	UDPPort    string
 
 	// Cloudflare R2
 	R2AccessKeyID     string
@@ -77,6 +78,7 @@ func Load() (*Config, error) {
 			SMTPFrom:     os.Getenv("SMTP_FROM"),
 			SMTPFromName: os.Getenv("SMTP_FROM_NAME"),
 			ServerPort:       envWithDefault("SERVER_PORT", "8080"),
+			UDPPort:         envWithDefault("UDP_PORT", "9000"),
 			R2AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
 			R2SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY"),
 			R2BucketName:      os.Getenv("R2_BUCKET_NAME"),

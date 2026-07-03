@@ -7,15 +7,19 @@ import (
 	"strconv"
 	"time"
 
+	"Communicate/internal/comm"
 	"Communicate/internal/config"
 	"Communicate/internal/handler"
 	"Communicate/internal/handler/auth"
+	"Communicate/internal/handler/signaling"
 	handleruser "Communicate/internal/handler/user"
 	"Communicate/internal/mail"
 	"Communicate/internal/store/db"
 	"Communicate/internal/store/db/migrate"
 	"Communicate/internal/store/db/models/indexes"
 	"Communicate/internal/store/db/models/tables"
+	"Communicate/internal/store/db/queries/sessions"
+	"Communicate/internal/store/db/queries/user"
 	"Communicate/internal/store/r2"
 	sqlitestore "Communicate/internal/store/sqlite"
 	"Communicate/internal/store/sqlite/queries/ratelimit"
@@ -71,6 +75,38 @@ func main() {
 		}
 	}()
 
+	// ── Hub (WebSocket signalling) ────────────────────────────────────
+	hub := comm.NewHub()
+
+	// Enable mid-session auth for UDP peers. When a UDP client sends a
+	// MSG with {"token":"<access_token>",...}, the hub validates it
+	// and sets the peer's display name + avatar from the DB.
+	hub.OnAuth = func(token string) (string, string, bool) {
+		s, err := sessions.GetByAccessToken(ctx, pool, token)
+		if err != nil || s == nil {
+			return "", "", false
+		}
+		u, err := user.FindByID(ctx, pool, s.UserID)
+		if err != nil || u == nil {
+			return "", "", false
+		}
+		avatar := ""
+		if u.ProfileImageURL != nil {
+			avatar = *u.ProfileImageURL
+		}
+		return u.Username, avatar, true
+	}
+
+	go hub.Run()
+
+	// ── UDP listener (JavaFX / non-WebSocket clients) ─────────────────
+	go func() {
+		log.Printf("UDP listener opening on :%s ...", cfg.UDPPort)
+		if err := comm.ListenUDP("localhost:"+cfg.UDPPort, hub); err != nil {
+			log.Fatalf("failed to open UDP port :%s: %v", cfg.UDPPort, err)
+		}
+	}()
+
 	// ── Services ──────────────────────────────────────────────────────
 	r2Client := r2.New(
 		cfg.R2AccessKeyID, cfg.R2SecretAccessKey,
@@ -95,6 +131,7 @@ func main() {
 	// ── Public routes ─────────────────────────────────────────────────
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handler.Health(pool, serverStart))
+	mux.HandleFunc("GET /ws", signaling.WebSocket(hub, pool))
 	mux.HandleFunc("POST /auth/register", handler.RateLimit(rateDB, "register",
 		auth.Register(pool, emailVerifier, mailer, cfg.BaseURL)))
 	mux.HandleFunc("GET /auth/verify-email", auth.VerifyEmail(pool))
@@ -104,6 +141,7 @@ func main() {
 	mux.HandleFunc("POST /auth/refresh", auth.Refresh(pool))
 	mux.HandleFunc("POST /auth/forgot-password", handler.RateLimit(rateDB, "forgot-password",
 		auth.ForgotPassword(pool, mailer, cfg.BaseURL)))
+	mux.HandleFunc("GET /auth/reset-password", auth.ResetPassword(pool))
 	mux.HandleFunc("POST /auth/reset-password", handler.RateLimit(rateDB, "reset-password",
 		auth.ResetPassword(pool)))
 

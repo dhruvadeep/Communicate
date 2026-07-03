@@ -11,38 +11,37 @@ import (
 )
 
 // VerifyEmail returns an http.HandlerFunc that handles GET /auth/verify-email.
+// Returns an HTML page since this is clicked from an email client.
 func VerifyEmail(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
 		if token == "" {
-			handler.WriteError(w, http.StatusBadRequest, "token is required")
+			handler.WriteHTML(w, http.StatusBadRequest, "Missing Token", "The verification link is missing the token parameter.")
 			return
 		}
 
 		t, err := emailtoken.GetValidToken(r.Context(), pool, token)
 		if err != nil {
 			log.Printf("get verification token: %v", err)
-			handler.WriteError(w, http.StatusInternalServerError, "internal server error")
+			handler.WriteHTML(w, http.StatusInternalServerError, "Server Error", "Something went wrong. Please try again later.")
 			return
 		}
 		if t == nil {
-			handler.WriteError(w, http.StatusBadRequest, "invalid or expired token")
+			handler.WriteHTML(w, http.StatusBadRequest, "Invalid or Expired", "This verification link is no longer valid. Please request a new one.")
 			return
 		}
 
 		if err := emailtoken.MarkEmailVerified(r.Context(), pool, t.UserID); err != nil {
 			log.Printf("mark email verified: %v", err)
-			handler.WriteError(w, http.StatusInternalServerError, "internal server error")
+			handler.WriteHTML(w, http.StatusInternalServerError, "Server Error", "Something went wrong. Please try again later.")
 			return
 		}
 
 		if err := emailtoken.ConsumeToken(r.Context(), pool, t.ID); err != nil {
 			log.Printf("consume token: %v", err)
-			// Email is already verified — non-fatal if token cleanup fails.
 		}
 
-		handler.WriteJSON(w, http.StatusOK, map[string]string{
-			"message": "email verified successfully",
-		})
+		handler.WriteHTML(w, http.StatusOK, "Email Verified",
+			"Your email address has been verified successfully. You can now close this page and log in.")
 	}
 }
